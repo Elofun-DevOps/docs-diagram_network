@@ -1,0 +1,140 @@
+version: '3.3'
+services:
+
+  user:
+    image: registry.elofun.net/library/nginx-proxy:0.0.1
+    networks:
+      n1:
+        ipv4_address: 1.2.3.4
+      
+        
+  traefik:
+    image: traefik:v2.9
+    command: 
+      - --providers.file.filename=/path/to/config/dynamic_conf.yml
+    networks:
+      n1:
+        ipv4_address: 1.2.3.2
+      n2:
+        ipv4_address: 10.1.1.2  
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /u01/traefik:/path/to/config
+
+  router1:
+    image: registry.elofun.net/library/nginx-proxy:0.0.1
+    networks:
+      n2:
+        ipv4_address: 10.1.1.10
+      n3:
+        ipv4_address: 10.2.2.2
+    environment:
+      CONF: |
+        daemon off;
+        events {
+        
+        }
+        http {
+          server {
+            listen 80;
+            location / {
+              proxy_pass http://router2;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+             
+            }
+          }
+        }
+      
+  router2:
+    image: registry.elofun.net/library/nginx-proxy:0.0.1
+    networks:
+      n3:
+        ipv4_address: 10.2.2.10
+      n4:
+        ipv4_address: 192.168.1.2
+    environment:
+      CONF: |
+        daemon off;
+        events {
+    
+        }
+        http {
+          server {
+            listen 80;
+            location / {
+              proxy_pass http://router3;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+            }
+          }
+        }  
+      
+  router3:
+    image: registry.elofun.net/library/nginx-proxy:0.0.1
+    networks:
+      n4:
+        ipv4_address: 192.168.1.10
+      n5:
+        ipv4_address: 192.168.2.2
+    environment:
+      CONF: |
+        daemon off;
+        events {
+       
+        }
+        http {
+          server {
+            listen 80;
+            location / {
+              proxy_pass http://whoami;
+              proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+              proxy_set_header X-Real-IP $$remote_addr;
+              #set_real_ip_from 192.168.1.0/24;
+              #set_real_ip_from 10.2.2.0/24;
+              #set_real_ip_from 10.1.1.0/24;
+              set_real_ip_from 10.0.0.0/8;
+              set_real_ip_from 172.16.0.0/16;
+              set_real_ip_from 192.168.1.0/24;
+              real_ip_header X-Forwarded-For;
+              real_ip_recursive on;
+            }
+          }
+        }   
+     
+  whoami:
+    image: traefik/whoami
+    networks:
+      n5:
+        ipv4_address: 192.168.2.100
+
+networks:
+  n1:
+    # Public -> Traefik
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 1.2.3.0/24
+  n2:
+    # Traefik -> Router1
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.1.1.0/24
+  n3:
+    # Router1 -> Router2
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.2.2.0/24
+  n4:
+    # Router2 -> Router3
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24      
+  n5:
+    # Router3 -> Whoami
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.2.0/24      
