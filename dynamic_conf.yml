@@ -1,0 +1,16 @@
+entryPoints:
+  http:
+   address: ":80"
+http:
+  routers:
+    catchAll:
+      entryPoints:
+        - http
+      rule: "Path(`/`)"
+      service: router1
+
+  services:
+    router1:
+      loadBalancer:
+        servers:
+          - url: "http://router1/"
